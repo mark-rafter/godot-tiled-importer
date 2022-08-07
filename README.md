@@ -36,16 +36,16 @@ Then enable the plugin on the Project Settings.
 * Both `.tmx` (XML) and `.json` formats for maps.
 * Both `.tsx` (XML) and `.json` formats for tilesets.
 * Support for Base64 encoded map.
-* Support for layer compression, both `zlib` and `gzip` are supported.
+* Support for layer compression, `zlib`, `gzip`, and `zstd` are supported.
 * Object templates.
 * Orthogonal, isometric, staggered, and hexagonal maps.
 * Import visibility and opacity from layers.
-* Import collision/occluder/navigation shapes (based on Tiled object type).
+* Import collision/occluder/navigation shapes (based on Tiled object class/type).
 * Support for one-way collision shapes.
 * Custom import options, such as whether to enable UV clip.
 * Support for image layers.
 * Support for object layers, which are imported as StaticBody2D, Area2D or LightOccluder2D
-  for shapes (depending on the `type` property) and as Sprite for tiles.
+  for shapes (depending on the `class` or `type` property) and as Sprite for tiles.
 * Support for group layers, which are imported as `Node2D`s.
 * Custom properties for maps, layers, tilesets, and objects are imported as
   metadata. Custom properties on tiles can be imported into the TileSet resource.
@@ -92,9 +92,9 @@ Find more useage information on the [Wiki](https://github.com/vnen/godot-tiled-i
   will be converted to a capsule shape, which may be imprecise. However, if the
   Tiled ellipse is a perfect circle, a CircleShape2D will be used instead.
 
-* Set the type of the object to `area`, `navigation` or `occluder` to use it as such.
+* Set the class/type of the object to `area`, `navigation` or `occluder` to use it as such.
 
-* Set the type of the object to `one-way` to mark it as a one-way shape in Godot
+* Set the class/type of the object to `one-way` to mark it as a one-way shape in Godot
 (both on tile and on object layers).
 
 * Objects in object layer cannot be set as `navigation`.
@@ -156,6 +156,13 @@ used in the Godot TileMap).
 
 Enable the Clip Uv (Filter Clip on Sprites) to avoid image bleeding on tiles.
 
+### Y Sort (Map only)
+
+**Default: `On`**
+
+The map's tiles will be drawn in order of their Y coordinates. If this is not needed
+it can be turned off to get better performance and more FPS when being drawn.
+
 ### Image Flags
 
 **Default: `Mipmaps, Repeat, Filter`** (Note: this is set as `Texture.FLAGS_DEFAULT`)
@@ -168,6 +175,13 @@ are embedded, otherwise they will use the flags from their own import settings.
 **Default: `1`**
 
 The collision layer for the maps and objects imported. If you need custom layers for
+each object, consider using a post-import script.
+
+### Collision Mask (Map only)
+
+**Default: `1`**
+
+The collision mask for the maps and objects imported. If you need custom masks for
 each object, consider using a post-import script.
 
 ### Embed Internal Images

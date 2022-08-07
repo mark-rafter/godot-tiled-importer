@@ -74,6 +74,10 @@ func get_import_options(preset):
 			"default_value": true
 		},
 		{
+			"name": "y_sort",
+			"default_value": true
+		},
+		{
 			"name": "image_flags",
 			"default_value": 0 if preset == PRESET_PIXEL_ART else Texture.FLAGS_DEFAULT,
 			"property_hint": PROPERTY_HINT_FLAGS,
@@ -81,6 +85,11 @@ func get_import_options(preset):
 		},
 		{
 			"name": "collision_layer",
+			"default_value": 1,
+			"property_hint": PROPERTY_HINT_LAYERS_2D_PHYSICS
+		},
+		{
+			"name": "collision_mask",
 			"default_value": 1,
 			"property_hint": PROPERTY_HINT_LAYERS_2D_PHYSICS
 		},

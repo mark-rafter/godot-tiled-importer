@@ -41,6 +41,7 @@ const error_prefix = "Tiled Importer: "
 # Properties to save the value in the metadata
 const whitelist_properties = [
 	"backgroundcolor",
+	"class",
 	"compression",
 	"draworder",
 	"gid",
@@ -230,8 +231,9 @@ func make_layer(layer, parent, root, data):
 		tilemap.cell_half_offset = map_offset
 		tilemap.format = 1
 		tilemap.cell_clip_uv = options.uv_clip
-		tilemap.cell_y_sort = true
+		tilemap.cell_y_sort = options.y_sort
 		tilemap.collision_layer = options.collision_layer
+		tilemap.collision_mask = options.collision_mask
 		tilemap.z_index = z_index
 
 		var offset = Vector2()
@@ -382,7 +384,7 @@ func make_layer(layer, parent, root, data):
 
 			elif not "gid" in object:
 				# Not a tile object
-				if "type" in object and object.type == "navigation":
+				if ("class" in object and object.class == "navigation") or ("type" in object and object.type == "navigation"):
 					# Can't make navigation objects right now
 					print_error("Navigation polygons aren't supported in an object layer.")
 					continue # Non-fatal error
@@ -392,7 +394,7 @@ func make_layer(layer, parent, root, data):
 					# Error happened
 					return shape
 
-				if "type" in object and object.type == "occluder":
+				if ("class" in object and object.class == "occluder") or ("type" in object and object.type == "occluder"):
 					var occluder = LightOccluder2D.new()
 					var pos = Vector2()
 					var rot = 0
@@ -422,7 +424,7 @@ func make_layer(layer, parent, root, data):
 					occluder.set_owner(root)
 
 				else:
-					var body = Area2D.new() if object.type == "area" else StaticBody2D.new()
+					var body = Area2D.new() if object.class == "area" or object.type == "area" else StaticBody2D.new()
 
 					var offset = Vector2()
 					var collision
@@ -462,7 +464,7 @@ func make_layer(layer, parent, root, data):
 							collision.build_mode = CollisionPolygon2D.BUILD_SOLIDS
 						collision.polygon = points
 
-					collision.one_way_collision = object.type == "one-way"
+					collision.one_way_collision = object.class == "one-way" or object.type == "one-way"
 
 					if "x" in object:
 						pos.x = float(object.x)
@@ -526,7 +528,14 @@ func make_layer(layer, parent, root, data):
 
 				var obj_root = sprite
 				if has_collisions:
-					if object.has("type"):
+					if object.has("class") and object.class != "":
+						match object.class:
+							"area": obj_root = Area2D.new()
+							"kinematic": obj_root = KinematicBody2D.new()
+							"rigid": obj_root = RigidBody2D.new()
+              "one-way": obj_root = StaticBody2D.new()
+							_: obj_root = StaticBody2D.new()
+					elif object.has("type") and object.type != "":
 						match object.type:
 							"area": obj_root = Area2D.new()
 							"kinematic": obj_root = KinematicBody2D.new()
@@ -628,6 +637,8 @@ func set_default_obj_params(object):
 	for attr in ["width", "height", "rotation", "x", "y"]:
 		if not attr in object:
 			object[attr] = 0
+	if not "class" in object:
+		object.class = ""
 	if not "type" in object:
 		object.type = ""
 	if not "visible" in object:
@@ -804,14 +815,14 @@ func build_tileset_for_scene(tilesets, source_path, options):
 					if "width" in object and "height" in object:
 						offset += Vector2(float(object.width) / 2, float(object.height) / 2)
 
-					if object.type == "navigation":
+					if object.class == "navigation" or object.type == "navigation":
 						result.tile_set_navigation_polygon(gid, shape)
 						result.tile_set_navigation_polygon_offset(gid, offset)
-					elif object.type == "occluder":
+					elif object.class == "occluder" or object.type == "occluder":
 						result.tile_set_light_occluder(gid, shape)
 						result.tile_set_occluder_offset(gid, offset)
 					else:
-						result.tile_add_shape(gid, shape, Transform2D(0, offset), object.type == "one-way")
+						result.tile_add_shape(gid, shape, Transform2D(0, offset), object.class == "one-way" or object.type == "one-way")
 
 			if "properties" in ts and "custom_material" in ts.properties:
 				result.tile_set_material(gid, load(ts.properties.custom_material))
@@ -950,7 +961,7 @@ func read_tileset_file(path):
 	return content.result
 
 # Creates a shape from an object data
-# Returns a valid shape depending on the object type (collision/occluder/navigation)
+# Returns a valid shape depending on the object class/type (collision/occluder/navigation)
 func shape_from_object(object):
 	var shape = ERR_INVALID_DATA
 	set_default_obj_params(object)
@@ -965,12 +976,12 @@ func shape_from_object(object):
 			for point in object.polyline:
 				vertices.push_back(Vector2(float(point.x), float(point.y)))
 
-		if object.type == "navigation":
+		if object.class == "navigation" or object.type == "navigation":
 			shape = NavigationPolygon.new()
 			shape.vertices = vertices
 			shape.add_outline(vertices)
 			shape.make_polygons_from_outlines()
-		elif object.type == "occluder":
+		elif object.class == "occluder" or object.type == "occluder":
 			shape = OccluderPolygon2D.new()
 			shape.polygon = vertices
 			shape.closed = "polygon" in object
@@ -990,7 +1001,7 @@ func shape_from_object(object):
 				shape.segments = PoolVector2Array(segments)
 
 	elif "ellipse" in object:
-		if object.type == "navigation" or object.type == "occluder":
+		if object.class == "navigation" or object.class == "occluder" or object.type == "navigation" or object.type == "occluder":
 			print_error("Ellipse shapes are not supported as navigation or occluder. Use polygon/polyline instead.")
 			return ERR_INVALID_DATA
 
@@ -1017,7 +1028,7 @@ func shape_from_object(object):
 
 		var size = Vector2(float(object.width), float(object.height))
 
-		if object.type == "navigation" or object.type == "occluder":
+		if object.class == "navigation" or object.class == "occluder" or object.type == "navigation" or object.type == "occluder":
 			# Those types only accept polygons, so make one from the rectangle
 			var vertices = PoolVector2Array([
 					Vector2(0, 0),
@@ -1025,7 +1036,7 @@ func shape_from_object(object):
 					size,
 					Vector2(0, size.y)
 			])
-			if object.type == "navigation":
+			if object.class == "navigation" or object.type == "navigation":
 				shape = NavigationPolygon.new()
 				shape.vertices = vertices
 				shape.add_outline(vertices)
@@ -1062,13 +1073,19 @@ func is_convex(vertices):
 	return true
 
 # Decompress the data of the layer
-# Compression argument is a string, either "gzip" or "zlib"
+# Compression argument is a string, either "gzip", "zlib", or "zstd"
 func decompress_layer_data(layer_data, compression, map_size):
-	if compression != "gzip" and compression != "zlib":
-		print_error("Unrecognized compression format: %s" % [compression])
-		return ERR_INVALID_DATA
-
-	var compression_type = File.COMPRESSION_DEFLATE if compression == "zlib" else File.COMPRESSION_GZIP
+	var compression_type = -1
+	match compression:
+		"zlib":
+			compression_type = File.COMPRESSION_DEFLATE
+		"gzip":
+			compression_type = File.COMPRESSION_GZIP
+		"zstd":
+			compression_type = File.COMPRESSION_ZSTD
+		_:
+			print_error("Unrecognized compression format: %s" % [compression])
+			return ERR_INVALID_DATA
 	var expected_size = int(map_size.x) * int(map_size.y) * 4
 	var raw_data = Marshalls.base64_to_raw(layer_data).decompress(expected_size, compression_type)
 
@@ -1243,7 +1260,7 @@ func validate_layer(layer):
 				print_error("Invalid data layer property.")
 				return ERR_INVALID_DATA
 			if "compression" in layer:
-				if layer.compression != "gzip" and layer.compression != "zlib":
+				if layer.compression != "gzip" and layer.compression != "zlib" and layer.compression != "zstd":
 					print_error("Invalid compression type.")
 					return ERR_INVALID_DATA
 		"imagelayer":
