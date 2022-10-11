@@ -41,7 +41,6 @@ const error_prefix = "Tiled Importer: "
 # Properties to save the value in the metadata
 const whitelist_properties = [
 	"backgroundcolor",
-	"class",
 	"compression",
 	"draworder",
 	"gid",
@@ -384,7 +383,7 @@ func make_layer(layer, parent, root, data):
 
 			elif not "gid" in object:
 				# Not a tile object
-				if ("class" in object and object.class == "navigation") or ("type" in object and object.type == "navigation"):
+				if "type" in object and object.type == "navigation":
 					# Can't make navigation objects right now
 					print_error("Navigation polygons aren't supported in an object layer.")
 					continue # Non-fatal error
@@ -394,7 +393,7 @@ func make_layer(layer, parent, root, data):
 					# Error happened
 					return shape
 
-				if ("class" in object and object.class == "occluder") or ("type" in object and object.type == "occluder"):
+				if "type" in object and object.type == "occluder":
 					var occluder = LightOccluder2D.new()
 					var pos = Vector2()
 					var rot = 0
@@ -424,7 +423,7 @@ func make_layer(layer, parent, root, data):
 					occluder.set_owner(root)
 
 				else:
-					var body = Area2D.new() if object.class == "area" or object.type == "area" else StaticBody2D.new()
+					var body = Area2D.new() if object.type == "area" else StaticBody2D.new()
 
 					var offset = Vector2()
 					var collision
@@ -464,7 +463,7 @@ func make_layer(layer, parent, root, data):
 							collision.build_mode = CollisionPolygon2D.BUILD_SOLIDS
 						collision.polygon = points
 
-					collision.one_way_collision = object.class == "one-way" or object.type == "one-way"
+					collision.one_way_collision = object.type == "one-way"
 
 					if "x" in object:
 						pos.x = float(object.x)
@@ -498,7 +497,7 @@ func make_layer(layer, parent, root, data):
 
 				var is_tile_object = tileset.tile_get_region(tile_id).get_area() == 0
 				var collisions = tileset.tile_get_shape_count(tile_id)
-				var has_collisions = collisions > 0
+				var has_collisions = collisions > 0 && object.has("type") && object.type != "sprite"
 				var sprite = Sprite.new()
 				var pos = Vector2()
 				var rot = 0
@@ -528,22 +527,11 @@ func make_layer(layer, parent, root, data):
 
 				var obj_root = sprite
 				if has_collisions:
-					if object.has("class") and object.class != "":
-						match object.class:
-							"area": obj_root = Area2D.new()
-							"kinematic": obj_root = KinematicBody2D.new()
-							"rigid": obj_root = RigidBody2D.new()
-              "one-way": obj_root = StaticBody2D.new()
-							_: obj_root = StaticBody2D.new()
-					elif object.has("type") and object.type != "":
-						match object.type:
-							"area": obj_root = Area2D.new()
-							"kinematic": obj_root = KinematicBody2D.new()
-							"rigid": obj_root = RigidBody2D.new()
-							"one-way": obj_root = StaticBody2D.new()
-							_: obj_root = StaticBody2D.new()
-					else:
-						obj_root = StaticBody2D.new()
+					match object.type:
+						"area": obj_root = Area2D.new()
+						"kinematic": obj_root = KinematicBody2D.new()
+						"rigid": obj_root = RigidBody2D.new()
+						_: obj_root = StaticBody2D.new()
 
 					object_layer.add_child(obj_root)
 					obj_root.owner = root
@@ -559,15 +547,12 @@ func make_layer(layer, parent, root, data):
 						collision_node.transform = s.shape_transform
 						if sprite.flip_h:
 							collision_node.position.x *= -1
-							collision_node.position.x += cell_size.x
+							collision_node.position.x -= cell_size.x
 							collision_node.scale.x *= -1
 						if sprite.flip_v:
 							collision_node.scale.y *= -1
 							collision_node.position.y *= -1
-						else:
 							collision_node.position.y -= cell_size.y
-						if object.has("type") && object.type == "one-way":
-							collision_node.one_way_collision = true
 						obj_root.add_child(collision_node)
 						collision_node.owner = root
 
@@ -637,8 +622,6 @@ func set_default_obj_params(object):
 	for attr in ["width", "height", "rotation", "x", "y"]:
 		if not attr in object:
 			object[attr] = 0
-	if not "class" in object:
-		object.class = ""
 	if not "type" in object:
 		object.type = ""
 	if not "visible" in object:
@@ -815,14 +798,14 @@ func build_tileset_for_scene(tilesets, source_path, options):
 					if "width" in object and "height" in object:
 						offset += Vector2(float(object.width) / 2, float(object.height) / 2)
 
-					if object.class == "navigation" or object.type == "navigation":
+					if object.type == "navigation":
 						result.tile_set_navigation_polygon(gid, shape)
 						result.tile_set_navigation_polygon_offset(gid, offset)
-					elif object.class == "occluder" or object.type == "occluder":
+					elif object.type == "occluder":
 						result.tile_set_light_occluder(gid, shape)
 						result.tile_set_occluder_offset(gid, offset)
 					else:
-						result.tile_add_shape(gid, shape, Transform2D(0, offset), object.class == "one-way" or object.type == "one-way")
+						result.tile_add_shape(gid, shape, Transform2D(0, offset), object.type == "one-way")
 
 			if "properties" in ts and "custom_material" in ts.properties:
 				result.tile_set_material(gid, load(ts.properties.custom_material))
@@ -961,7 +944,7 @@ func read_tileset_file(path):
 	return content.result
 
 # Creates a shape from an object data
-# Returns a valid shape depending on the object class/type (collision/occluder/navigation)
+# Returns a valid shape depending on the object type (collision/occluder/navigation)
 func shape_from_object(object):
 	var shape = ERR_INVALID_DATA
 	set_default_obj_params(object)
@@ -976,12 +959,12 @@ func shape_from_object(object):
 			for point in object.polyline:
 				vertices.push_back(Vector2(float(point.x), float(point.y)))
 
-		if object.class == "navigation" or object.type == "navigation":
+		if object.type == "navigation":
 			shape = NavigationPolygon.new()
 			shape.vertices = vertices
 			shape.add_outline(vertices)
 			shape.make_polygons_from_outlines()
-		elif object.class == "occluder" or object.type == "occluder":
+		elif object.type == "occluder":
 			shape = OccluderPolygon2D.new()
 			shape.polygon = vertices
 			shape.closed = "polygon" in object
@@ -1001,7 +984,7 @@ func shape_from_object(object):
 				shape.segments = PoolVector2Array(segments)
 
 	elif "ellipse" in object:
-		if object.class == "navigation" or object.class == "occluder" or object.type == "navigation" or object.type == "occluder":
+		if object.type == "navigation" or object.type == "occluder":
 			print_error("Ellipse shapes are not supported as navigation or occluder. Use polygon/polyline instead.")
 			return ERR_INVALID_DATA
 
@@ -1028,7 +1011,7 @@ func shape_from_object(object):
 
 		var size = Vector2(float(object.width), float(object.height))
 
-		if object.class == "navigation" or object.class == "occluder" or object.type == "navigation" or object.type == "occluder":
+		if object.type == "navigation" or object.type == "occluder":
 			# Those types only accept polygons, so make one from the rectangle
 			var vertices = PoolVector2Array([
 					Vector2(0, 0),
@@ -1036,7 +1019,7 @@ func shape_from_object(object):
 					size,
 					Vector2(0, size.y)
 			])
-			if object.class == "navigation" or object.type == "navigation":
+			if object.type == "navigation":
 				shape = NavigationPolygon.new()
 				shape.vertices = vertices
 				shape.add_outline(vertices)
